@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -17,6 +18,21 @@
   <div id="root"></div>
   <script type="text/babel">
     const { useState, useEffect } = React;
+
+    // ============================================
+    // SUPABASE CONFIGURATION
+    // ============================================
+    // IMPORTANT: Add your Supabase anon key below!
+    // Find it at: Settings → API → Project API keys → anon public
+    const SUPABASE_URL = 'https://izlleygwccfunfrcjtvc.supabase.co';
+    const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE'; // <-- PASTE YOUR KEY HERE
+
+    // Initialize Supabase client (only if key is configured)
+    const supabase = SUPABASE_ANON_KEY !== 'YOUR_ANON_KEY_HERE'
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      : null;
+
+    // ============================================
 
     const initialOrgData = {
       id: "1",
@@ -764,8 +780,87 @@
       const [showRemote, setShowRemote] = useState(true);
       const [deptFilter, setDeptFilter] = useState('all');
       const [compDisplay, setCompDisplay] = useState('annual'); // 'annual' or 'monthly'
+      const [syncStatus, setSyncStatus] = useState(supabase ? 'loading' : 'local'); // 'loading', 'synced', 'saving', 'error', 'local'
+      const [isInitialized, setIsInitialized] = useState(false);
 
-      // Save to localStorage when data changes
+      // Load from Supabase on mount
+      useEffect(() => {
+        if (!supabase) {
+          setIsInitialized(true);
+          return;
+        }
+
+        const loadFromSupabase = async () => {
+          try {
+            setSyncStatus('loading');
+            const { data, error } = await supabase
+              .from('org_data')
+              .select('*')
+              .eq('id', 'main')
+              .single();
+
+            if (error) {
+              // If no data exists yet, insert the current localStorage data
+              if (error.code === 'PGRST116') {
+                console.log('No data in Supabase yet, will save current state');
+                setSyncStatus('synced');
+                setIsInitialized(true);
+                return;
+              }
+              throw error;
+            }
+
+            if (data) {
+              // Only load if there's actual data
+              if (data.current_data && Object.keys(data.current_data).length > 0) {
+                setCurrentOrgData(data.current_data);
+              }
+              if (data.future_data && Object.keys(data.future_data).length > 0) {
+                setFutureOrgData(data.future_data);
+              }
+              setSyncStatus('synced');
+            }
+            setIsInitialized(true);
+          } catch (err) {
+            console.error('Error loading from Supabase:', err);
+            setSyncStatus('error');
+            setIsInitialized(true);
+          }
+        };
+
+        loadFromSupabase();
+      }, []);
+
+      // Save to Supabase when data changes (with debounce)
+      useEffect(() => {
+        if (!supabase || !isInitialized) return;
+
+        const saveToSupabase = async () => {
+          setSyncStatus('saving');
+          try {
+            const { error } = await supabase
+              .from('org_data')
+              .upsert({
+                id: 'main',
+                current_data: currentOrgData,
+                future_data: futureOrgData,
+                updated_at: new Date().toISOString()
+              });
+
+            if (error) throw error;
+            setSyncStatus('synced');
+          } catch (err) {
+            console.error('Error saving to Supabase:', err);
+            setSyncStatus('error');
+          }
+        };
+
+        // Debounce saves to avoid too many requests
+        const timer = setTimeout(saveToSupabase, 1000);
+        return () => clearTimeout(timer);
+      }, [currentOrgData, futureOrgData, isInitialized]);
+
+      // Save to localStorage when data changes (as backup)
       useEffect(() => {
         localStorage.setItem('orgChart_current', JSON.stringify(currentOrgData));
       }, [currentOrgData]);
@@ -1011,6 +1106,51 @@
           <div className="max-w-full mx-auto">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-gray-800 mb-2">Organization Chart</h1>
+
+              {/* Sync Status Indicator */}
+              <div className="flex justify-center mb-2">
+                {syncStatus === 'local' && (
+                  <span className="text-xs px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    Local only - Add Supabase key to sync
+                  </span>
+                )}
+                {syncStatus === 'loading' && (
+                  <span className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                    Loading from cloud...
+                  </span>
+                )}
+                {syncStatus === 'saving' && (
+                  <span className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                    Saving...
+                  </span>
+                )}
+                {syncStatus === 'synced' && (
+                  <span className="text-xs px-3 py-1 bg-green-100 text-green-700 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Synced to cloud
+                  </span>
+                )}
+                {syncStatus === 'error' && (
+                  <span className="text-xs px-3 py-1 bg-red-100 text-red-700 rounded-full flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    Sync error - Check console
+                  </span>
+                )}
+              </div>
 
               {/* View Mode Toggle */}
               <div className="flex justify-center items-center gap-4 mb-4">
