@@ -1059,19 +1059,34 @@
     };
 
     function OrgChart() {
-      // Load from localStorage or use defaults
+      // Load from localStorage or use defaults (with error handling)
       const [currentOrgData, setCurrentOrgData] = useState(() => {
-        const saved = localStorage.getItem('orgChart_current');
-        return saved ? JSON.parse(saved) : initialOrgData;
+        try {
+          const saved = localStorage.getItem('orgChart_current');
+          return saved ? JSON.parse(saved) : initialOrgData;
+        } catch (e) {
+          console.error('Error loading current org data:', e);
+          return initialOrgData;
+        }
       });
       const [futureOrgData, setFutureOrgData] = useState(() => {
-        const saved = localStorage.getItem('orgChart_future');
-        return saved ? JSON.parse(saved) : initialFutureOrgData;
+        try {
+          const saved = localStorage.getItem('orgChart_future');
+          return saved ? JSON.parse(saved) : initialFutureOrgData;
+        } catch (e) {
+          console.error('Error loading future org data:', e);
+          return initialFutureOrgData;
+        }
       });
       // Scenarios for budget planning
       const [scenarios, setScenarios] = useState(() => {
-        const saved = localStorage.getItem('orgChart_scenarios');
-        return saved ? JSON.parse(saved) : {};
+        try {
+          const saved = localStorage.getItem('orgChart_scenarios');
+          return saved ? JSON.parse(saved) : {};
+        } catch (e) {
+          console.error('Error loading scenarios:', e);
+          return {};
+        }
       });
       const [activeScenario, setActiveScenario] = useState('Current');
       const [pageView, setPageView] = useState('chart'); // 'chart' or 'budget'
