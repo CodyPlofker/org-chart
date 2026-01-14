@@ -16,7 +16,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
 
     const initialOrgData = {
       id: "1",
@@ -248,7 +248,7 @@
       </svg>
     );
 
-    const OrgNode = ({ node, level, onUpdate, onAdd, onDelete, onMove, onSwapRoles, draggedNode, setDraggedNode, draggedRole, setDraggedRole, showRemote }) => {
+    const OrgNode = ({ node, level, onUpdate, onAdd, onDelete, onMove, onReorder, onSwapRoles, draggedNode, setDraggedNode, draggedRole, setDraggedRole, showRemote, deptFilter, siblingIndex = 0, siblingCount = 1 }) => {
       const [isExpanded, setIsExpanded] = useState(level < 3);
       const [isEditing, setIsEditing] = useState(false);
       const [editData, setEditData] = useState({
@@ -256,15 +256,28 @@
         title: node.title,
         department: node.department,
         remote: node.remote || false,
-        monthlyRate: node.monthlyRate || ""
+        monthlyRate: node.monthlyRate || "",
+        salary: node.salary || ""
       });
       const [isDragOver, setIsDragOver] = useState(false);
       const [isRoleDragOver, setIsRoleDragOver] = useState(false);
 
-      // Filter children based on showRemote setting
-      const visibleChildren = showRemote 
-        ? node.children 
+      // Filter children based on showRemote and department filter
+      let visibleChildren = showRemote
+        ? node.children
         : node.children?.filter(child => !child.remote) || [];
+
+      // Apply department filter
+      if (deptFilter && deptFilter !== 'all') {
+        visibleChildren = visibleChildren.filter(child => {
+          // Check if child or any descendant matches the filter
+          const matchesDept = (n) => {
+            if (n.department === deptFilter) return true;
+            return n.children?.some(c => matchesDept(c)) || false;
+          };
+          return matchesDept(child);
+        });
+      }
 
       const hasVisibleChildren = visibleChildren && visibleChildren.length > 0;
       const colors = departmentColors[node.department] || departmentColors["Executive"];
@@ -275,6 +288,9 @@
       if (!showRemote && isRemote) {
         return null;
       }
+
+      // If department filter is set and this node doesn't match (and isn't an ancestor), dim it
+      const matchesFilter = !deptFilter || deptFilter === 'all' || node.department === deptFilter;
 
       const handleSave = () => {
         onUpdate(node.id, editData);
@@ -410,6 +426,13 @@
                     <option key={dept} value={dept}>{dept}</option>
                   ))}
                 </select>
+                <input
+                  type="text"
+                  value={editData.salary}
+                  onChange={(e) => setEditData({...editData, salary: e.target.value})}
+                  className="w-full px-2 py-1 border rounded text-sm"
+                  placeholder="Annual Salary (e.g. $120,000)"
+                />
                 <label className="flex items-center gap-2 text-sm text-gray-600">
                   <input
                     type="checkbox"
@@ -459,12 +482,47 @@
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
                       {node.department}
+                      {node.salary && (
+                        <span className="ml-2 text-green-600 font-medium">{node.salary}/yr</span>
+                      )}
                       {node.monthlyRate && (
                         <span className="ml-2 text-teal-600 font-medium">{node.monthlyRate}/mo</span>
                       )}
                     </div>
                   </div>
                 </div>
+
+                {/* Reorder arrows - show on hover when there are siblings */}
+                {level > 0 && siblingCount > 1 && (
+                  <div className="absolute top-1/2 -translate-y-1/2 -left-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {siblingIndex > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onReorder(node.id, -1); }}
+                        className="p-1 bg-white rounded-full shadow hover:bg-gray-100"
+                        title="Move left"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m15 18-6-6 6-6"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {level > 0 && siblingCount > 1 && (
+                  <div className="absolute top-1/2 -translate-y-1/2 -right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {siblingIndex < siblingCount - 1 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onReorder(node.id, 1); }}
+                        className="p-1 bg-white rounded-full shadow hover:bg-gray-100"
+                        title="Move right"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m9 18 6-6-6-6"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full shadow px-1 py-0.5">
                   <button onClick={() => setIsEditing(true)} className="p-1 hover:bg-gray-100 rounded" title="Edit">
@@ -494,7 +552,7 @@
 
           {hasVisibleChildren && isExpanded && (
             <>
-              <div className="w-0.5 h-6 bg-gray-300"></div>
+              <div className="w-0.5 h-8 bg-gray-300"></div>
               <div className="relative">
                 {visibleChildren.length > 1 && (
                   <div
@@ -502,10 +560,10 @@
                     style={{ width: `calc(100% - 256px)` }}
                   ></div>
                 )}
-                <div className="flex gap-4">
+                <div className="flex gap-8">
                   {visibleChildren.map((child, index) => (
                     <div key={child.id} className="flex flex-col items-center">
-                      {visibleChildren.length > 1 && <div className="w-0.5 h-6 bg-gray-300"></div>}
+                      {visibleChildren.length > 1 && <div className="w-0.5 h-8 bg-gray-300"></div>}
                       <OrgNode
                         node={child}
                         level={level + 1}
@@ -513,12 +571,16 @@
                         onAdd={onAdd}
                         onDelete={onDelete}
                         onMove={onMove}
+                        onReorder={onReorder}
                         onSwapRoles={onSwapRoles}
                         draggedNode={draggedNode}
                         setDraggedNode={setDraggedNode}
                         draggedRole={draggedRole}
                         setDraggedRole={setDraggedRole}
                         showRemote={showRemote}
+                        deptFilter={deptFilter}
+                        siblingIndex={index}
+                        siblingCount={visibleChildren.length}
                       />
                     </div>
                   ))}
@@ -663,13 +725,31 @@
     };
 
     function OrgChart() {
-      const [currentOrgData, setCurrentOrgData] = useState(initialOrgData);
-      const [futureOrgData, setFutureOrgData] = useState(initialFutureOrgData);
+      // Load from localStorage or use defaults
+      const [currentOrgData, setCurrentOrgData] = useState(() => {
+        const saved = localStorage.getItem('orgChart_current');
+        return saved ? JSON.parse(saved) : initialOrgData;
+      });
+      const [futureOrgData, setFutureOrgData] = useState(() => {
+        const saved = localStorage.getItem('orgChart_future');
+        return saved ? JSON.parse(saved) : initialFutureOrgData;
+      });
       const [viewMode, setViewMode] = useState('current');
       const [zoom, setZoom] = useState(1);
       const [draggedNode, setDraggedNode] = useState(null);
       const [draggedRole, setDraggedRole] = useState(null);
       const [showRemote, setShowRemote] = useState(true);
+      const [deptFilter, setDeptFilter] = useState('all');
+      const [compDisplay, setCompDisplay] = useState('annual'); // 'annual' or 'monthly'
+
+      // Save to localStorage when data changes
+      useEffect(() => {
+        localStorage.setItem('orgChart_current', JSON.stringify(currentOrgData));
+      }, [currentOrgData]);
+
+      useEffect(() => {
+        localStorage.setItem('orgChart_future', JSON.stringify(futureOrgData));
+      }, [futureOrgData]);
 
       const orgData = viewMode === 'current' ? currentOrgData : futureOrgData;
       const setOrgData = viewMode === 'current' ? setCurrentOrgData : setFutureOrgData;
@@ -821,6 +901,27 @@
         setDraggedRole(null);
       };
 
+      const reorderNode = (nodeId, direction) => {
+        const reorderInParent = (node) => {
+          const childIndex = node.children.findIndex(child => child.id === nodeId);
+          if (childIndex !== -1) {
+            const newIndex = childIndex + direction;
+            if (newIndex >= 0 && newIndex < node.children.length) {
+              const newChildren = [...node.children];
+              const [removed] = newChildren.splice(childIndex, 1);
+              newChildren.splice(newIndex, 0, removed);
+              return { ...node, children: newChildren };
+            }
+            return node;
+          }
+          return {
+            ...node,
+            children: node.children.map(reorderInParent)
+          };
+        };
+        setOrgData(reorderInParent(orgData));
+      };
+
       const countEmployees = (node, includeRemote = true) => {
         if (!includeRemote && node.remote) return 0;
         const childCount = node.children?.reduce((sum, child) => sum + countEmployees(child, includeRemote), 0) || 0;
@@ -913,8 +1014,9 @@
                 <span className="text-teal-600">Remote Monthly: <strong>${remoteMonthlyCost.toLocaleString()}</strong></span>
               </div>
 
-              {/* Remote Toggle */}
-              <div className="flex justify-center mb-4">
+              {/* Filter Controls */}
+              <div className="flex justify-center gap-4 mb-4 flex-wrap">
+                {/* Remote Toggle */}
                 <button
                   onClick={() => setShowRemote(!showRemote)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${
@@ -925,16 +1027,40 @@
                 >
                   {showRemote ? <EyeIcon /> : <EyeOffIcon />}
                   <GlobeIcon size={16} />
-                  <span className="font-medium">{showRemote ? 'Showing Remote' : 'Hiding Remote'}</span>
+                  <span className="font-medium">{showRemote ? 'Remote' : 'No Remote'}</span>
+                </button>
+
+                {/* Department Filter */}
+                <select
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                  className="px-4 py-2 rounded-lg border-2 border-gray-300 bg-white text-sm font-medium"
+                >
+                  <option value="all">All Departments</option>
+                  {Object.keys(departmentColors).map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+
+                {/* Comp Display Toggle */}
+                <button
+                  onClick={() => setCompDisplay(compDisplay === 'annual' ? 'monthly' : 'annual')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-green-300 bg-green-50 text-green-700 transition-all"
+                >
+                  <span className="font-medium">Show: {compDisplay === 'annual' ? 'Annual' : 'Monthly'}</span>
                 </button>
               </div>
 
               {/* Department Legend */}
-              <div className="mt-4 flex justify-center gap-4 flex-wrap">
+              <div className="mt-4 flex justify-center gap-3 flex-wrap">
                 {Object.entries(departmentColors).map(([dept, colors]) => (
-                  <div key={dept} className={`${colors.bg} ${colors.border} border px-3 py-1 rounded-full text-sm ${colors.text}`}>
+                  <button
+                    key={dept}
+                    onClick={() => setDeptFilter(deptFilter === dept ? 'all' : dept)}
+                    className={`${colors.bg} ${colors.border} border px-3 py-1 rounded-full text-sm ${colors.text} cursor-pointer transition-all hover:scale-105 ${deptFilter === dept ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}
+                  >
                     {dept}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -966,18 +1092,20 @@
                   onAdd={addChild}
                   onDelete={deleteNode}
                   onMove={moveNode}
+                  onReorder={reorderNode}
                   onSwapRoles={swapRoles}
                   draggedNode={draggedNode}
                   setDraggedNode={setDraggedNode}
                   draggedRole={draggedRole}
                   setDraggedRole={setDraggedRole}
                   showRemote={showRemote}
+                  deptFilter={deptFilter}
                 />
               </div>
             </div>
 
             <div className="mt-6 text-center text-sm text-gray-500">
-              <p><strong>Tips:</strong> Drag cards to reassign reporting | Drag the <span className="text-purple-500">swap icon</span> next to a role to swap titles | Hover for edit controls</p>
+              <p><strong>Tips:</strong> Drag cards to reassign reporting | Use arrows to reorder siblings | Click departments to filter | Changes auto-save</p>
             </div>
           </div>
         </div>
