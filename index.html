@@ -248,6 +248,29 @@
       </svg>
     );
 
+    // Department hierarchy - child departments that should be included when filtering by parent
+    const departmentHierarchy = {
+      "Marketing": ["Brand Marketing", "Growth Marketing", "Creative"],
+      "Executive": [],
+      "Operations": [],
+      "Finance": [],
+      "Retail": [],
+      "People": [],
+      "Vacant": [],
+      "Creative": [],
+      "Growth Marketing": [],
+      "Brand Marketing": [],
+      "Remote": []
+    };
+
+    // Check if a department matches the filter (including hierarchy)
+    const deptMatchesFilter = (dept, filter) => {
+      if (!filter || filter === 'all') return true;
+      if (dept === filter) return true;
+      // Check if dept is a child of the filter
+      return departmentHierarchy[filter]?.includes(dept) || false;
+    };
+
     const OrgNode = ({ node, level, onUpdate, onAdd, onDelete, onMove, onReorder, onSwapRoles, draggedNode, setDraggedNode, draggedRole, setDraggedRole, showRemote, deptFilter, siblingIndex = 0, siblingCount = 1 }) => {
       const [isExpanded, setIsExpanded] = useState(level < 3);
       const [isEditing, setIsEditing] = useState(false);
@@ -267,12 +290,12 @@
         ? node.children
         : node.children?.filter(child => !child.remote) || [];
 
-      // Apply department filter
+      // Apply department filter (including hierarchy)
       if (deptFilter && deptFilter !== 'all') {
         visibleChildren = visibleChildren.filter(child => {
-          // Check if child or any descendant matches the filter
+          // Check if child or any descendant matches the filter (including sub-departments)
           const matchesDept = (n) => {
-            if (n.department === deptFilter) return true;
+            if (deptMatchesFilter(n.department, deptFilter)) return true;
             return n.children?.some(c => matchesDept(c)) || false;
           };
           return matchesDept(child);
@@ -290,7 +313,7 @@
       }
 
       // If department filter is set and this node doesn't match (and isn't an ancestor), dim it
-      const matchesFilter = !deptFilter || deptFilter === 'all' || node.department === deptFilter;
+      const matchesFilter = !deptFilter || deptFilter === 'all' || deptMatchesFilter(node.department, deptFilter);
 
       const handleSave = () => {
         onUpdate(node.id, editData);
