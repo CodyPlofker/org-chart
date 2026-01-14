@@ -294,9 +294,11 @@
         name: node.name,
         title: node.title,
         department: node.department,
+        subdepartment: node.subdepartment || "",
         remote: node.remote || false,
         monthlyRate: node.monthlyRate || "",
-        salary: node.salary || ""
+        salary: node.salary || "",
+        vacant: node.vacant || node.name === "Vacant" || false
       });
       const [isDragOver, setIsDragOver] = useState(false);
       const [isRoleDragOver, setIsRoleDragOver] = useState(false);
@@ -319,7 +321,9 @@
       }
 
       const hasVisibleChildren = visibleChildren && visibleChildren.length > 0;
-      const colors = departmentColors[node.department] || departmentColors["Executive"];
+      // Use gray/vacant styling if node is marked vacant OR name is "Vacant"
+      const isVacant = node.vacant || node.name === "Vacant";
+      const colors = isVacant ? departmentColors["Vacant"] : (departmentColors[node.department] || departmentColors["Executive"]);
       const isBeingDragged = draggedNode?.id === node.id;
       const isRemote = node.remote;
 
@@ -461,10 +465,26 @@
                   onChange={(e) => setEditData({...editData, department: e.target.value})}
                   className="w-full px-2 py-1 border rounded text-sm"
                 >
-                  {Object.keys(departmentColors).map(dept => (
+                  {Object.keys(departmentColors).filter(d => d !== 'Vacant').map(dept => (
                     <option key={dept} value={dept}>{dept}</option>
                   ))}
                 </select>
+                <input
+                  type="text"
+                  value={editData.subdepartment}
+                  onChange={(e) => setEditData({...editData, subdepartment: e.target.value})}
+                  className="w-full px-2 py-1 border rounded text-sm"
+                  placeholder="Subdepartment (e.g. Paid Social)"
+                />
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={editData.vacant}
+                    onChange={(e) => setEditData({...editData, vacant: e.target.checked})}
+                    className="rounded"
+                  />
+                  Vacant Position
+                </label>
                 <input
                   type="text"
                   value={editData.salary}
@@ -520,7 +540,10 @@
                       </div>
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {node.department}
+                      <span className={isVacant ? 'text-gray-400 italic' : ''}>
+                        {node.department}{node.subdepartment && ` › ${node.subdepartment}`}
+                        {isVacant && ' (Vacant)'}
+                      </span>
                       {node.salary && (
                         <span className="ml-2 text-green-600 font-medium">{node.salary}/yr</span>
                       )}
