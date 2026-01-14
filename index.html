@@ -298,7 +298,8 @@
         remote: node.remote || false,
         monthlyRate: node.monthlyRate || "",
         salary: node.salary || "",
-        vacant: node.vacant || node.name === "Vacant" || false
+        vacant: node.vacant || node.name === "Vacant" || false,
+        startDate: node.startDate || ""
       });
       const [isDragOver, setIsDragOver] = useState(false);
       const [isRoleDragOver, setIsRoleDragOver] = useState(false);
@@ -492,6 +493,15 @@
                   className="w-full px-2 py-1 border rounded text-sm"
                   placeholder="Annual Salary (e.g. $120,000)"
                 />
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600">Start Date:</label>
+                  <input
+                    type="date"
+                    value={editData.startDate}
+                    onChange={(e) => setEditData({...editData, startDate: e.target.value})}
+                    className="flex-1 px-2 py-1 border rounded text-sm"
+                  />
+                </div>
                 <label className="flex items-center gap-2 text-sm text-gray-600">
                   <input
                     type="checkbox"
@@ -786,6 +796,263 @@
       ]
     };
 
+    // Budget Table Component
+    const BudgetTable = ({ scenarios, activeScenario, onSelectScenario, onAddScenario, onDeleteScenario, onRenameScenario, showCurrentOnly }) => {
+      const [newScenarioName, setNewScenarioName] = useState('');
+      const [editingName, setEditingName] = useState(null);
+      const [tempName, setTempName] = useState('');
+
+      // Flatten org tree to array
+      const flattenOrg = (node, result = []) => {
+        const isNew = node.startDate && new Date(node.startDate) > new Date();
+        if (!showCurrentOnly || !isNew) {
+          result.push({
+            id: node.id,
+            name: node.name,
+            title: node.title,
+            department: node.department,
+            subdepartment: node.subdepartment,
+            salary: node.salary,
+            monthlyRate: node.monthlyRate,
+            startDate: node.startDate,
+            remote: node.remote,
+            vacant: node.vacant || node.name === 'Vacant',
+            isNew
+          });
+        }
+        node.children?.forEach(child => flattenOrg(child, result));
+        return result;
+      };
+
+      // Parse salary string to number
+      const parseSalary = (str) => {
+        if (!str) return 0;
+        return parseFloat(str.replace(/[^0-9.]/g, '')) || 0;
+      };
+
+      // Group by month cohort
+      const groupByCohort = (employees) => {
+        const cohorts = {};
+        employees.forEach(emp => {
+          const key = emp.startDate
+            ? new Date(emp.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+            : 'Existing';
+          if (!cohorts[key]) cohorts[key] = [];
+          cohorts[key].push(emp);
+        });
+        return cohorts;
+      };
+
+      // Calculate scenario totals
+      const calculateTotals = (orgData) => {
+        const employees = flattenOrg(orgData);
+        let annualSalary = 0;
+        let monthlyRemote = 0;
+        employees.forEach(emp => {
+          annualSalary += parseSalary(emp.salary);
+          monthlyRemote += parseSalary(emp.monthlyRate);
+        });
+        return {
+          headcount: employees.length,
+          annualSalary,
+          monthlyRemote,
+          totalAnnual: annualSalary + (monthlyRemote * 12)
+        };
+      };
+
+      const scenarioData = scenarios[activeScenario];
+      const employees = scenarioData ? flattenOrg(scenarioData) : [];
+      const cohorts = groupByCohort(employees);
+      const totals = scenarioData ? calculateTotals(scenarioData) : { headcount: 0, annualSalary: 0, monthlyRemote: 0, totalAnnual: 0 };
+
+      // Sort cohorts - "Existing" first, then by date
+      const sortedCohortKeys = Object.keys(cohorts).sort((a, b) => {
+        if (a === 'Existing') return -1;
+        if (b === 'Existing') return 1;
+        return new Date(a) - new Date(b);
+      });
+
+      return (
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          {/* Scenario Tabs */}
+          <div className="flex items-center gap-2 mb-6 flex-wrap">
+            {Object.keys(scenarios).map(name => (
+              <div key={name} className="relative group">
+                {editingName === name ? (
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    onBlur={() => {
+                      if (tempName.trim() && tempName !== name) {
+                        onRenameScenario(name, tempName.trim());
+                      }
+                      setEditingName(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (tempName.trim() && tempName !== name) {
+                          onRenameScenario(name, tempName.trim());
+                        }
+                        setEditingName(null);
+                      }
+                    }}
+                    className="px-3 py-2 border rounded text-sm w-32"
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    onClick={() => onSelectScenario(name)}
+                    onDoubleClick={() => {
+                      setEditingName(name);
+                      setTempName(name);
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      activeScenario === name
+                        ? 'bg-indigo-500 text-white shadow'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                )}
+                {Object.keys(scenarios).length > 1 && activeScenario !== name && (
+                  <button
+                    onClick={() => onDeleteScenario(name)}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            <div className="flex items-center gap-2 ml-4">
+              <input
+                type="text"
+                value={newScenarioName}
+                onChange={(e) => setNewScenarioName(e.target.value)}
+                placeholder="New scenario..."
+                className="px-3 py-2 border rounded text-sm w-36"
+              />
+              <button
+                onClick={() => {
+                  if (newScenarioName.trim()) {
+                    onAddScenario(newScenarioName.trim());
+                    setNewScenarioName('');
+                  }
+                }}
+                className="px-3 py-2 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+              >
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-blue-700">{totals.headcount}</div>
+              <div className="text-sm text-blue-600">Total Headcount</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-green-700">${totals.annualSalary.toLocaleString()}</div>
+              <div className="text-sm text-green-600">Annual Salaries</div>
+            </div>
+            <div className="bg-teal-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-teal-700">${totals.monthlyRemote.toLocaleString()}/mo</div>
+              <div className="text-sm text-teal-600">Remote Monthly</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-purple-700">${totals.totalAnnual.toLocaleString()}</div>
+              <div className="text-sm text-purple-600">Total Annual Cost</div>
+            </div>
+          </div>
+
+          {/* Cohort Tables */}
+          {sortedCohortKeys.map(cohortKey => (
+            <div key={cohortKey} className="mb-6">
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <span className={cohortKey === 'Existing' ? 'text-gray-700' : 'text-indigo-600'}>
+                  {cohortKey}
+                </span>
+                <span className="text-sm font-normal text-gray-500">
+                  ({cohorts[cohortKey].length} {cohorts[cohortKey].length === 1 ? 'person' : 'people'})
+                </span>
+                {cohortKey !== 'Existing' && (
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">New Hire</span>
+                )}
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="text-left p-2">Name</th>
+                      <th className="text-left p-2">Title</th>
+                      <th className="text-left p-2">Department</th>
+                      <th className="text-left p-2">Start Date</th>
+                      <th className="text-right p-2">Annual</th>
+                      <th className="text-right p-2">Monthly</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cohorts[cohortKey].map(emp => (
+                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${emp.vacant ? 'bg-gray-100 text-gray-500 italic' : ''}`}>
+                        <td className="p-2">
+                          {emp.name}
+                          {emp.isNew && <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded">NEW</span>}
+                          {emp.vacant && <span className="ml-2 px-1.5 py-0.5 bg-gray-200 text-gray-600 text-xs rounded">VACANT</span>}
+                        </td>
+                        <td className="p-2">{emp.title}</td>
+                        <td className="p-2">
+                          {emp.department}
+                          {emp.subdepartment && <span className="text-gray-400"> › {emp.subdepartment}</span>}
+                        </td>
+                        <td className="p-2">{emp.startDate || '—'}</td>
+                        <td className="p-2 text-right text-green-600">{emp.salary || '—'}</td>
+                        <td className="p-2 text-right text-teal-600">{emp.monthlyRate || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {/* Scenario Comparison */}
+          {Object.keys(scenarios).length > 1 && (
+            <div className="mt-8 pt-6 border-t">
+              <h3 className="text-lg font-semibold mb-4">Scenario Comparison</h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left p-2">Scenario</th>
+                    <th className="text-right p-2">Headcount</th>
+                    <th className="text-right p-2">Annual Salary</th>
+                    <th className="text-right p-2">Monthly Remote</th>
+                    <th className="text-right p-2">Total Annual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(scenarios).map(([name, data]) => {
+                    const t = calculateTotals(data);
+                    return (
+                      <tr key={name} className={`border-b ${name === activeScenario ? 'bg-indigo-50' : ''}`}>
+                        <td className="p-2 font-medium">{name}</td>
+                        <td className="p-2 text-right">{t.headcount}</td>
+                        <td className="p-2 text-right text-green-600">${t.annualSalary.toLocaleString()}</td>
+                        <td className="p-2 text-right text-teal-600">${t.monthlyRemote.toLocaleString()}/mo</td>
+                        <td className="p-2 text-right text-purple-600 font-semibold">${t.totalAnnual.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     function OrgChart() {
       // Load from localStorage or use defaults
       const [currentOrgData, setCurrentOrgData] = useState(() => {
@@ -796,6 +1063,15 @@
         const saved = localStorage.getItem('orgChart_future');
         return saved ? JSON.parse(saved) : initialFutureOrgData;
       });
+      // Scenarios for budget planning
+      const [scenarios, setScenarios] = useState(() => {
+        const saved = localStorage.getItem('orgChart_scenarios');
+        return saved ? JSON.parse(saved) : {};
+      });
+      const [activeScenario, setActiveScenario] = useState('Current');
+      const [pageView, setPageView] = useState('chart'); // 'chart' or 'budget'
+      const [showCurrentOnly, setShowCurrentOnly] = useState(false);
+
       const [viewMode, setViewMode] = useState('current');
       const [zoom, setZoom] = useState(1);
       const [draggedNode, setDraggedNode] = useState(null);
@@ -805,6 +1081,48 @@
       const [compDisplay, setCompDisplay] = useState('annual'); // 'annual' or 'monthly'
       const [syncStatus, setSyncStatus] = useState(supabase ? 'loading' : 'local'); // 'loading', 'synced', 'saving', 'error', 'local'
       const [isInitialized, setIsInitialized] = useState(false);
+
+      // Sync scenarios with current/future data
+      useEffect(() => {
+        setScenarios(prev => ({
+          ...prev,
+          'Current': currentOrgData,
+          'Future': futureOrgData
+        }));
+      }, [currentOrgData, futureOrgData]);
+
+      // Save scenarios to localStorage
+      useEffect(() => {
+        localStorage.setItem('orgChart_scenarios', JSON.stringify(scenarios));
+      }, [scenarios]);
+
+      // Scenario management functions
+      const addScenario = (name) => {
+        if (scenarios[name]) return;
+        setScenarios(prev => ({
+          ...prev,
+          [name]: JSON.parse(JSON.stringify(scenarios[activeScenario] || currentOrgData))
+        }));
+        setActiveScenario(name);
+      };
+
+      const deleteScenario = (name) => {
+        if (name === 'Current' || name === 'Future') return;
+        const { [name]: _, ...rest } = scenarios;
+        setScenarios(rest);
+        if (activeScenario === name) {
+          setActiveScenario('Current');
+        }
+      };
+
+      const renameScenario = (oldName, newName) => {
+        if (oldName === 'Current' || oldName === 'Future' || scenarios[newName]) return;
+        const { [oldName]: data, ...rest } = scenarios;
+        setScenarios({ ...rest, [newName]: data });
+        if (activeScenario === oldName) {
+          setActiveScenario(newName);
+        }
+      };
 
       // Load from Supabase on mount
       useEffect(() => {
@@ -1130,6 +1448,30 @@
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-gray-800 mb-2">Organization Chart</h1>
 
+              {/* Page View Toggle */}
+              <div className="flex justify-center gap-2 mb-4">
+                <button
+                  onClick={() => setPageView('chart')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    pageView === 'chart'
+                      ? 'bg-gray-800 text-white shadow'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Org Chart
+                </button>
+                <button
+                  onClick={() => setPageView('budget')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    pageView === 'budget'
+                      ? 'bg-gray-800 text-white shadow'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Budget & Scenarios
+                </button>
+              </div>
+
               {/* Sync Status Indicator */}
               <div className="flex justify-center mb-2">
                 {syncStatus === 'local' && (
@@ -1175,6 +1517,35 @@
                 )}
               </div>
 
+              {/* Budget View */}
+              {pageView === 'budget' && (
+                <>
+                  <div className="flex justify-center items-center gap-4 mb-4">
+                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={showCurrentOnly}
+                        onChange={(e) => setShowCurrentOnly(e.target.checked)}
+                        className="rounded"
+                      />
+                      Show current employees only (hide future hires)
+                    </label>
+                  </div>
+                  <BudgetTable
+                    scenarios={scenarios}
+                    activeScenario={activeScenario}
+                    onSelectScenario={setActiveScenario}
+                    onAddScenario={addScenario}
+                    onDeleteScenario={deleteScenario}
+                    onRenameScenario={renameScenario}
+                    showCurrentOnly={showCurrentOnly}
+                  />
+                </>
+              )}
+
+              {/* Chart View */}
+              {pageView === 'chart' && (
+              <>
               {/* View Mode Toggle */}
               <div className="flex justify-center items-center gap-4 mb-4">
                 <div className="inline-flex rounded-lg border border-gray-300 p-1 bg-white shadow-sm">
@@ -1345,6 +1716,8 @@
             <div className="mt-6 text-center text-sm text-gray-500">
               <p><strong>Tips:</strong> Drag cards to reassign reporting | Use arrows to reorder siblings | Click departments to filter | Changes auto-save</p>
             </div>
+            </>
+            )}
           </div>
         </div>
       );
