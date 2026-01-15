@@ -15,7 +15,14 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><div style="padding:40px;text-align:center;color:#666;">Loading...</div></div>
+  <script>
+    // Global error handler to catch any script errors
+    window.onerror = function(msg, url, line, col, error) {
+      document.getElementById('root').innerHTML = '<div style="padding:40px;color:red;"><h2>Error Loading App</h2><p>' + msg + '</p><p>Line: ' + line + '</p><pre>' + (error ? error.stack : '') + '</pre></div>';
+      return false;
+    };
+  </script>
   <script type="text/babel">
     const { useState, useEffect } = React;
 
