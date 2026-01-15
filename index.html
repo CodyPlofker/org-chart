@@ -25,6 +25,30 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    // Error Boundary to catch React errors
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+      componentDidCatch(error, info) {
+        console.error('React Error:', error, info);
+      }
+      render() {
+        if (this.state.hasError) {
+          return <div style={{padding: '40px', color: 'red'}}>
+            <h2>React Error</h2>
+            <pre>{this.state.error?.toString()}</pre>
+            <button onClick={() => {localStorage.clear(); location.reload();}}>Clear Data & Reload</button>
+          </div>;
+        }
+        return this.props.children;
+      }
+    }
+
     // Supabase disabled for now - using localStorage only
     const supabase = null;
 
@@ -1751,7 +1775,7 @@
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<OrgChart />);
+    root.render(<ErrorBoundary><OrgChart /></ErrorBoundary>);
   </script>
 </body>
 </html>
