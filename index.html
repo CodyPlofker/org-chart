@@ -319,7 +319,8 @@
         monthlyRate: node.monthlyRate || "",
         salary: node.salary || "",
         vacant: node.vacant || node.name === "Vacant" || false,
-        startDate: node.startDate || ""
+        startDate: node.startDate || "",
+        notes: node.notes || ""
       });
       const [isDragOver, setIsDragOver] = useState(false);
       const [isRoleDragOver, setIsRoleDragOver] = useState(false);
@@ -540,6 +541,13 @@
                     placeholder="Monthly Rate (e.g. $3,000)"
                   />
                 )}
+                <textarea
+                  value={editData.notes}
+                  onChange={(e) => setEditData({...editData, notes: e.target.value})}
+                  className="w-full px-2 py-1 border rounded text-sm"
+                  placeholder="Notes (optional)"
+                  rows={2}
+                />
                 <div className="flex gap-2">
                   <button onClick={handleSave} className="flex-1 bg-green-500 text-white px-2 py-1 rounded text-sm hover:bg-green-600">Save</button>
                   <button onClick={() => setIsEditing(false)} className="flex-1 bg-gray-300 px-2 py-1 rounded text-sm hover:bg-gray-400">Cancel</button>
@@ -822,6 +830,7 @@
       const [editingName, setEditingName] = useState(null);
       const [tempName, setTempName] = useState('');
       const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+      const [employeeFilter, setEmployeeFilter] = useState('all'); // 'all', 'new', 'existing'
 
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -874,7 +883,15 @@
       };
 
       const scenarioData = scenarios[activeScenario];
-      const employees = scenarioData ? flattenOrg(scenarioData) : [];
+      const allEmployees = scenarioData ? flattenOrg(scenarioData) : [];
+
+      // Apply employee filter (new/existing/all)
+      const employees = allEmployees.filter(emp => {
+        if (employeeFilter === 'all') return true;
+        if (employeeFilter === 'new') return emp.isNew;
+        if (employeeFilter === 'existing') return !emp.isNew;
+        return true;
+      });
 
       // Separate remote and in-house
       const remoteEmployees = employees.filter(e => e.remote);
@@ -962,11 +979,21 @@
                 className="px-3 py-2 bg-green-500 text-white rounded text-sm hover:bg-green-600"
               >+ Add</button>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <label className="text-sm text-gray-600">Year:</label>
-              <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="px-3 py-2 border rounded text-sm">
-                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+            <div className="ml-auto flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Show:</label>
+                <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} className="px-3 py-2 border rounded text-sm">
+                  <option value="all">All Employees</option>
+                  <option value="new">New Hires Only</option>
+                  <option value="existing">Existing Only</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Year:</label>
+                <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="px-3 py-2 border rounded text-sm">
+                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -976,13 +1003,13 @@
               <div className="text-2xl font-bold text-blue-700">{employees.length}</div>
               <div className="text-sm text-blue-600">Total Headcount</div>
             </div>
-            <div className="bg-teal-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-teal-700">{remoteEmployees.length}</div>
-              <div className="text-sm text-teal-600">Remote/Contractors</div>
-            </div>
             <div className="bg-green-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-green-700">{inHouseEmployees.length}</div>
               <div className="text-sm text-green-600">In-House</div>
+            </div>
+            <div className="bg-teal-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-teal-700">{remoteEmployees.length}</div>
+              <div className="text-sm text-teal-600">Remote/Contractors</div>
             </div>
             <div className="bg-purple-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-purple-700">${Math.round(yearTotal).toLocaleString()}</div>
@@ -1004,14 +1031,6 @@
                 </tr>
               </thead>
               <tbody>
-                {/* Remote/Contractors Section */}
-                <tr className="bg-teal-50">
-                  <td colSpan={14} className="p-2 font-semibold text-teal-800 sticky left-0 bg-teal-50">
-                    Remote / Contractors ({remoteEmployees.length})
-                  </td>
-                </tr>
-                {remoteEmployees.map(renderEmployeeRow)}
-
                 {/* In-House Section */}
                 <tr className="bg-green-50">
                   <td colSpan={14} className="p-2 font-semibold text-green-800 sticky left-0 bg-green-50">
@@ -1019,6 +1038,14 @@
                   </td>
                 </tr>
                 {inHouseEmployees.map(renderEmployeeRow)}
+
+                {/* Remote/Contractors Section */}
+                <tr className="bg-teal-50">
+                  <td colSpan={14} className="p-2 font-semibold text-teal-800 sticky left-0 bg-teal-50">
+                    Remote / Contractors ({remoteEmployees.length})
+                  </td>
+                </tr>
+                {remoteEmployees.map(renderEmployeeRow)}
 
                 {/* Vacant Positions */}
                 {vacantPositions.length > 0 && (
