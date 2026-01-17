@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -49,8 +50,19 @@
       }
     }
 
-    // Supabase disabled for now - using localStorage only
-    const supabase = null;
+    // Supabase Configuration
+    const SUPABASE_URL = 'https://izlleygwccfunfrcjtvc.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6bGxleWd3Y2NmdW5mcmNqdHZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MDQyNTYsImV4cCI6MjA4Mzk4MDI1Nn0.XQNQIkxIg6D6MFqtYMn5QJ4H0lLIpUXkhWAvsuEF190';
+
+    // Initialize Supabase client (with fallback if CDN fails)
+    let supabase = null;
+    try {
+      if (window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+    } catch (e) {
+      console.error('Failed to initialize Supabase:', e);
+    }
 
     // ============================================
 
